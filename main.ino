@@ -4,40 +4,37 @@
 
 // Define pins for sensors and actuators
 const int tempSensorPin = A0;
-const int motionSensorPin = 2;
-const int ledPin = 3;
-const int fanPin = 4;
+const int lightSensorPin = A1;
+const int piezoPin = 3;
+const int motorPin = 4;
 
 // Variables to store sensor data and actuator states
 float temperature = 0.0;
-bool motionDetected = false;
-bool ledState = false;
-bool fanState = false;
+int lightLevel = 0;
+bool motorState = false;
 
 // Variables to store conditional rules
-int updateInterval = 1000; // Default update interval
-float temperatureThreshold = 25.0; // Default temperature threshold
-bool motionEnabled = true; // Default motion detection enabled
+int updateInterval = 1000;          // Default update interval
+float temperatureThreshold = 25.0;  // Default temperature threshold
 
 void setup() {
   // Initialize serial communication
   Serial.begin(9600);
 
   // Set pin modes for sensors and actuators
-  pinMode(motionSensorPin, INPUT);
-  pinMode(ledPin, OUTPUT);
-  pinMode(fanPin, OUTPUT);
+  pinMode(piezoPin, OUTPUT);
+  pinMode(motorPin, OUTPUT);
 }
 
 void loop() {
-  // Read mock data from sensors
+  // Read data from sensors
   temperature = getTemperatureData();
-  motionDetected = getMotionMockData();
+  lightLevel = getLightData();
 
   // Create a JSON object to store sensor data
   StaticJsonDocument<200> sensorDoc;
   sensorDoc["temperature"] = temperature;
-  sensorDoc["motion"] = motionDetected;
+  sensorDoc["lightLevel"] = lightLevel;
 
   // Send sensor data as JSON object over serial
   serializeJson(sensorDoc, Serial);
@@ -49,28 +46,24 @@ void loop() {
     processCommand(json);
   }
 
-  // Control actuators based on sensor data and conditions
-  controlLed();
-  controlFan();
+  // Control actuators based on temperature condition
+  controlMotor();
+  controlPiezo();
 
   // Delay for the specified update interval before the next iteration
   delay(updateInterval);
 }
 
-// Function to get mock temperature data
-float getTemperatureMockData() {
-  // Generate random temperature value between 20 and 30 degrees Celsius
-  return random(20, 31);
-}
-
+// Function to get temperature data
 float getTemperatureData() {
-  return analogRead(tempSensorPin);
+  float temperatureF = analogRead(tempSensorPin);
+  float temperatureC = (temperatureF - 32.0) * 5.0 / 9.0;
+  return temperatureC;
 }
 
-// Function to get mock motion data
-bool getMotionMockData() {
-  // Randomly return true or false for motion detection
-  return random(0, 2) == 1;
+// Function to get light data
+int getLightData() {
+  return analogRead(lightSensorPin);
 }
 
 // Function to process incoming commands from Raspberry Pi
@@ -90,30 +83,27 @@ void processCommand(String json) {
   if (doc.containsKey("u")) {
     updateInterval = doc["u"];
   }
-
   if (doc.containsKey("t")) {
     temperatureThreshold = doc["t"];
   }
+}
 
-  if (doc.containsKey("m")) {
-    motionEnabled = doc["m"];
+// Function to control motor based on temperature condition
+void controlMotor() {
+  if (temperature > temperatureThreshold) {
+    digitalWrite(motorPin, HIGH);
+    motorState = true;
+  } else {
+    digitalWrite(motorPin, LOW);
+    motorState = false;
   }
 }
 
-// Function to control LED based on conditions
-void controlLed() {
-  if (ledState || (motionEnabled && motionDetected)) {
-    digitalWrite(ledPin, HIGH);
+// Function to control piezo based on temperature condition
+void controlPiezo() {
+  if (temperature > temperatureThreshold + 10) {
+    tone(piezoPin, 1000, 500);  // Play a tone of 1000Hz for 500ms
   } else {
-    digitalWrite(ledPin, LOW);
-  }
-}
-
-// Function to control fan based on conditions
-void controlFan() {
-  if (fanState || temperature > temperatureThreshold) {
-    digitalWrite(fanPin, HIGH);
-  } else {
-    digitalWrite(fanPin, LOW);
+    noTone(piezoPin);  // Stop playing the tone
   }
 }
